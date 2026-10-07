@@ -241,6 +241,13 @@ class VariantConfig:
     metrics_national_from_shards: bool = False  # 541611 builds National from shards
     metrics_use_filtered_input: bool = True  # IT reads non-national input from filtered dir
     unique_titles_template: str = "{state}_Unique_IT_Titles.json"
+    # --- reporting ---
+    report_html_template: str = "{state}_IT_Pricing_Full_Report.html"
+    report_js_template: str = "{state}_data.js"
+    report_summary_template: str = "{state}_IT_Pricing_Executive_Summary.md"
+    report_page_title_template: str = "{state} IT Pricing Analysis"
+    report_heading_template: str = "{state} IT Pricing Benchmark"
+    report_summary_title_template: str = "# IT Pricing Executive Summary: {state}"
 
 
 @dataclass(frozen=True)
@@ -322,6 +329,12 @@ def default_config(root: Path | str | None = None) -> Config:
                 metrics_national_from_shards=True,
                 metrics_use_filtered_input=False,
                 unique_titles_template="{state}_Unique_541611_Titles.json",
+                report_html_template="{state}_541611_Pricing_Full_Report.html",
+                report_js_template="{state}_541611_data.js",
+                report_summary_template="{state}_541611_Pricing_Executive_Summary.md",
+                report_page_title_template="{state} 541611 Management Consulting Analysis",
+                report_heading_template="{state} Management Consulting (541611) Pricing",
+                report_summary_title_template="# 541611 Pricing Executive Summary: {state}",
                 price_column_markers=("GSA", "Price"),
                 dirs=VariantDirs(
                     downloads="541611_price_lists",
