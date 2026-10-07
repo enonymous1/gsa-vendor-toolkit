@@ -236,6 +236,11 @@ class VariantConfig:
     merge_filename_metadata: bool = False  # Metadata_Vendor/_Contract from filename
     filtered_filename_template: str = "{state}_SIN_{sin}_Only.csv"
     national_output_filename: str | None = None  # None: national merge N/A
+    # --- metrics / exports ---
+    metrics_filename_template: str = "{state}_IT_Role_Metrics.csv"
+    metrics_national_from_shards: bool = False  # 541611 builds National from shards
+    metrics_use_filtered_input: bool = True  # IT reads non-national input from filtered dir
+    unique_titles_template: str = "{state}_Unique_IT_Titles.json"
 
 
 @dataclass(frozen=True)
@@ -313,6 +318,10 @@ def default_config(root: Path | str | None = None) -> Config:
                 merged_filename_template="{state}_541611_Master_List.csv",
                 merge_write_excel=False,
                 merge_filename_metadata=True,
+                metrics_filename_template="{state}_541611_Metrics.csv",
+                metrics_national_from_shards=True,
+                metrics_use_filtered_input=False,
+                unique_titles_template="{state}_Unique_541611_Titles.json",
                 price_column_markers=("GSA", "Price"),
                 dirs=VariantDirs(
                     downloads="541611_price_lists",
