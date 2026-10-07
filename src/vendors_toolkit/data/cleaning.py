@@ -8,7 +8,22 @@ so refactored output stays byte-comparable with the originals.
 
 from __future__ import annotations
 
+import math
+
 import pandas as pd
+
+
+def is_missing(value: object) -> bool:
+    """Scalar missing-value check mirroring ``pd.notnull`` for CSV-loaded cells.
+
+    Written explicitly (instead of ``pd.isna``) so the ``object`` parameter
+    type-checks under ``mypy --strict``.
+    """
+    if value is None:
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    return value is pd.NA or value is pd.NaT
 
 
 def clean_title(values: pd.Series) -> pd.Series:

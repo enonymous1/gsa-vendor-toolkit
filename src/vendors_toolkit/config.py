@@ -99,8 +99,8 @@ class DownloadConfig:
         (".xls", ".xlsx", ".xls"),
         (".doc", None, ".doc"),
     )
-    manifest_save_every: int = 10
-    safe_vendor_max_length: int = 50
+    manifest_save_every: int | None = 10  # None: write the manifest once at the end
+    safe_vendor_max_length: int | None = None  # None: no truncation
 
 
 @dataclass(frozen=True)
@@ -211,6 +211,14 @@ class VariantConfig:
     raw_csv: str  # dated snapshot name under ext_res/
     sanitized_csv: str  # sanitized output name under ext_res/
     manifest_filename: str  # download manifest name under output/summaries/
+    manifest_resume: bool = True  # merge with an existing manifest, skipping successes
+    manifest_columns: tuple[str, ...] | None = (
+        "Vendor",
+        "Contact #",
+        "Price List",
+        "Download_Status",
+        "Last_Error",
+    )  # None: write every column
     sanitize_category_filter: str | None = None  # e.g. "541611": pre-filter Category
     price_column_markers: tuple[str, str] = ("GSA Price", "with IFF")
     dirs: VariantDirs = field(default_factory=VariantDirs)
@@ -250,6 +258,9 @@ def default_config(root: Path | str | None = None) -> Config:
     - 54151S merger drops fully-empty rows/columns; the 541611 merger does not.
     - 54151S dashboards page at 50 rows, 541611 at 25.
     - The 541611 ``__main__`` capped downloads at 3000; 54151S had no cap.
+    - 54151S downloads resume from the manifest (5-column subset, saved every 10
+      completions); the 541611 downloader never resumed and wrote the full frame
+      once at the end.
     - Sheet matching is unified to exact ``"price list"`` (the 54151S behavior);
       the 541611 substring match could merge the wrong sheet.
     """
@@ -288,6 +299,8 @@ def default_config(root: Path | str | None = None) -> Config:
                 raw_csv="2026_03_02_08_18_31.csv",
                 sanitized_csv="vendors_541611_sanitized.csv",
                 manifest_filename="download_541611_manifest.csv",
+                manifest_resume=False,
+                manifest_columns=None,
                 sanitize_category_filter="541611",
                 price_column_markers=("GSA", "Price"),
                 dirs=VariantDirs(
@@ -302,6 +315,8 @@ def default_config(root: Path | str | None = None) -> Config:
                     timeout_seconds=15,
                     retry_sleep_seconds=0.5,
                     max_workers=15,
+                    manifest_save_every=None,
+                    safe_vendor_max_length=50,
                 ),
                 organize_mode="copy",
                 organize_extensions=(".pdf", ".xlsx", ".xls", ".doc"),

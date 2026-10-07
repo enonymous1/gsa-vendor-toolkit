@@ -7,10 +7,11 @@ is a pure, non-mutating port of the original ``sanitize_df``.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Collection, Mapping
 
 import pandas as pd
+
+from vendors_toolkit.data.cleaning import is_missing
 
 GSA_MAP: dict[str, str] = {
     "s": "Small Business",
@@ -37,22 +38,9 @@ GSA_MAP: dict[str, str] = {
 }
 
 
-def _is_missing(value: object) -> bool:
-    """Scalar missing-value check mirroring ``pd.notnull`` for CSV-loaded cells.
-
-    Written explicitly (instead of ``pd.isna``) so the ``object`` parameter
-    type-checks under ``mypy --strict``.
-    """
-    if value is None:
-        return True
-    if isinstance(value, float) and math.isnan(value):
-        return True
-    return value is pd.NA or value is pd.NaT
-
-
 def _map_gsa_value(value: object) -> object:
     """Map one raw cell through ``GSA_MAP``; nulls and unmapped values pass through."""
-    if _is_missing(value):
+    if is_missing(value):
         return value
     return GSA_MAP.get(str(value), value)
 
