@@ -125,7 +125,6 @@ class MetricsConfig:
     """Per-title pricing-metrics knobs."""
 
     price_column: str = "GSA Price with IFF  - as of price list generation date"
-    price_column_markers: tuple[str, str] = ("GSA Price", "with IFF")
     description_join_limit: int = 5000
     excel_cell_limit: int = 32000
     national_display_min_count: int = 2  # originals filtered ``Count > 1``
@@ -212,6 +211,8 @@ class VariantConfig:
     raw_csv: str  # dated snapshot name under ext_res/
     sanitized_csv: str  # sanitized output name under ext_res/
     manifest_filename: str  # download manifest name under output/summaries/
+    sanitize_category_filter: str | None = None  # e.g. "541611": pre-filter Category
+    price_column_markers: tuple[str, str] = ("GSA Price", "with IFF")
     dirs: VariantDirs = field(default_factory=VariantDirs)
     download: DownloadConfig = field(default_factory=DownloadConfig)
     organize_mode: OrganizeMode = "move"
@@ -265,6 +266,7 @@ def default_config(root: Path | str | None = None) -> Config:
                 raw_csv="2026_02_12_04_10_24.csv",
                 sanitized_csv="vendors_sanitized.csv",
                 manifest_filename="download_manifest.csv",
+                price_column_markers=("GSA Price", "with IFF"),
                 download=DownloadConfig(
                     extension_rules=(
                         (".pdf", None, ".pdf"),
@@ -286,6 +288,8 @@ def default_config(root: Path | str | None = None) -> Config:
                 raw_csv="2026_03_02_08_18_31.csv",
                 sanitized_csv="vendors_541611_sanitized.csv",
                 manifest_filename="download_541611_manifest.csv",
+                sanitize_category_filter="541611",
+                price_column_markers=("GSA", "Price"),
                 dirs=VariantDirs(
                     downloads="541611_price_lists",
                     by_region="541611_by_region",
