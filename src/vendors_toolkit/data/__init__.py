@@ -3,6 +3,7 @@
 from vendors_toolkit.data.cleaning import (
     clean_title,
     detect_price_column,
+    is_missing,
     normalize_title_key,
     to_price_numeric,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "GSA_MAP",
     "clean_title",
     "detect_price_column",
+    "is_missing",
     "normalize_title_key",
     "sanitize_frame",
     "to_price_numeric",
