@@ -118,6 +118,7 @@ class MergeConfig:
     sheet_name: str = "price list"  # matched case-insensitively after stripping
     sheet_match: SheetMatch = "exact"
     excel_row_limit: int = 1_000_000
+    national_progress_every: int = 50
 
 
 @dataclass(frozen=True)
@@ -229,6 +230,12 @@ class VariantConfig:
     merge_drop_empty: bool = True
     default_download_limit: int | None = None
     report_page_length: int = 50
+    # --- merge / filter / national ---
+    merged_filename_template: str = "{state}_Master_Price_List.csv"
+    merge_write_excel: bool = True
+    merge_filename_metadata: bool = False  # Metadata_Vendor/_Contract from filename
+    filtered_filename_template: str = "{state}_SIN_{sin}_Only.csv"
+    national_output_filename: str | None = None  # None: national merge N/A
 
 
 @dataclass(frozen=True)
@@ -278,6 +285,7 @@ def default_config(root: Path | str | None = None) -> Config:
                 sanitized_csv="vendors_sanitized.csv",
                 manifest_filename="download_manifest.csv",
                 price_column_markers=("GSA Price", "with IFF"),
+                national_output_filename="National_IT_Master_Price_List.csv",
                 download=DownloadConfig(
                     extension_rules=(
                         (".pdf", None, ".pdf"),
@@ -302,6 +310,9 @@ def default_config(root: Path | str | None = None) -> Config:
                 manifest_resume=False,
                 manifest_columns=None,
                 sanitize_category_filter="541611",
+                merged_filename_template="{state}_541611_Master_List.csv",
+                merge_write_excel=False,
+                merge_filename_metadata=True,
                 price_column_markers=("GSA", "Price"),
                 dirs=VariantDirs(
                     downloads="541611_price_lists",
