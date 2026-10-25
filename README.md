@@ -1,7 +1,7 @@
-# vendors_toolkit
+# gsa-vendor-toolkit
 
-Refactoring of the `ss-gsaVendors` GSA vendor price-list pipeline into an installable,
-maintainable Python package.
+GSA vendor price-list pipeline, refactored from the original `ss-gsaVendors`
+scripts into an installable, maintainable Python package (`vendors_toolkit`).
 
 **Pipeline:** download vendor price lists → organize by State/City → merge Excel
 "Price List" sheets into per-state master CSVs → filter by SIN → compute per-title
@@ -16,7 +16,7 @@ copy-vs-move, dashboard page length, …), the drift is captured explicitly in
 ## Layout
 
 ```text
-ss-gsaVendors-refactor/
+gsa-vendor-toolkit/
 ├── pyproject.toml                 # packaging, ruff + mypy-strict, `vendors-toolkit` entry point
 ├── src/vendors_toolkit/
 │   ├── __init__.py
