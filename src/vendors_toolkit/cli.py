@@ -1,7 +1,8 @@
 """Command-line interface for the vendors_toolkit pipeline.
 
-One subcommand per pipeline stage; each stage runs the unified engine for the
-selected variant(s). Global options select the project root
+One subcommand per pipeline stage, plus the standalone ``sam`` subcommand for
+SAM.gov lookups. Each stage runs the unified engine for the selected variant(s).
+Global options select the project root
 (``--root``, else the ``VENDORS_ROOT`` env var, else the working directory),
 the variant (``--variant 54151S`` / ``541611`` / ``all``), and logging.
 """
@@ -9,6 +10,7 @@ the variant (``--variant 54151S`` / ``541611`` / ``all``), and logging.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable, Sequence
 
@@ -17,6 +19,7 @@ from vendors_toolkit.analysis.audit import analyze_cardinality, run_audit
 from vendors_toolkit.analysis.exports import extract_unique_titles, generate_exports
 from vendors_toolkit.analysis.metrics import compute_title_metrics
 from vendors_toolkit.config import Config, VariantConfig, default_config
+from vendors_toolkit.integrations.samgov import SamGovClient
 from vendors_toolkit.logging_config import configure_logging
 from vendors_toolkit.pipeline.download import download_price_lists
 from vendors_toolkit.pipeline.filter import filter_sin
@@ -53,6 +56,12 @@ STAGES: list[tuple[str, str]] = [
         "report",
         "HTML dashboards + Markdown executive summaries "
         "(generate_pricing_reports + generate_541611_reports).",
+    ),
+    (
+        "sam",
+        "SAM.gov vendor enrichment: entity lookup, exclusion screening, "
+        "opportunity search. Standalone (not part of the pipeline chain); "
+        "requires SAM_API_KEY.",
     ),
 ]
 
@@ -124,6 +133,37 @@ def _stage_report(cfg: Config, variant: VariantConfig, args: argparse.Namespace)
     print(f"[{variant.sin}] wrote {len(paths)} dashboard(s)")
 
 
+def _stage_sam(cfg: Config, variant: VariantConfig, args: argparse.Namespace) -> None:
+    """SAM.gov lookups. Runs once (see main): calls count against a daily budget."""
+    client = SamGovClient(cfg.sam)
+    if args.status or (args.uei is None and args.cage is None and args.keywords is None):
+        print(f"SAM.gov API: {'configured' if client.is_configured else 'NOT configured'}")
+        print(f"  base URL: {cfg.sam.base_url}")
+        print(f"  key env var: {cfg.sam.api_key_env_var}")
+        if not client.is_configured:
+            print(
+                '  Get a free key: SAM.gov account → Account Details → "Public API Key", '
+                f"then set {cfg.sam.api_key_env_var}."
+            )
+        return
+    if args.excluded:
+        if args.uei is not None:
+            result = client.check_exclusions(uei=args.uei)
+        elif args.cage is not None:
+            result = client.check_exclusions(cage=args.cage)
+        else:
+            raise ValueError("Exclusion check needs --uei or --cage.")
+    elif args.uei is not None:
+        result = client.get_entity_by_uei(args.uei)
+    elif args.cage is not None:
+        result = client.get_entity_by_cage(args.cage)
+    else:
+        result = client.search_opportunities(
+            keywords=args.keywords, naics=args.naics, state=args.state
+        )
+    print(json.dumps(result, indent=2))
+
+
 STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], None]] = {
     "sanitize": _stage_sanitize,
     "download": _stage_download,
@@ -135,6 +175,7 @@ STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], Non
     "export": _stage_export,
     "national": _stage_national,
     "report": _stage_report,
+    "sam": _stage_sam,
 }
 
 
@@ -201,6 +242,23 @@ def build_parser() -> argparse.ArgumentParser:
     filter_p = stage_parsers["filter"]
     filter_p.add_argument("--sin", default=None, help="SIN to keep (default: the variant's SIN).")
 
+    sam_p = stage_parsers["sam"]
+    sam_p.add_argument(
+        "--status",
+        action="store_true",
+        help="Report SAM.gov configuration without calling the API.",
+    )
+    sam_p.add_argument("--uei", default=None, help="Look up an entity by 12-character UEI.")
+    sam_p.add_argument("--cage", default=None, help="Look up an entity by 5-character CAGE code.")
+    sam_p.add_argument("--keywords", default=None, help="Search opportunities by keyword.")
+    sam_p.add_argument("--naics", default=None, help="NAICS code filter for opportunity search.")
+    sam_p.add_argument("--state", default=None, help="State filter for opportunity search.")
+    sam_p.add_argument(
+        "--excluded",
+        action="store_true",
+        help="Check exclusions for --uei/--cage instead of entity lookup.",
+    )
+
     return parser
 
 
@@ -218,8 +276,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cfg = default_config(root=args.root)
     run_stage = STAGE_FUNCS[args.stage]
+    variants = _selected_variants(cfg, args.variant)
+    if args.stage == "sam":
+        # SAM.gov calls count against a daily budget: run once, not per variant.
+        variants = variants[:1]
     try:
-        for variant in _selected_variants(cfg, args.variant):
+        for variant in variants:
             run_stage(cfg, variant, args)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)

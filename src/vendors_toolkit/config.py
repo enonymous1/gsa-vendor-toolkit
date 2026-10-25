@@ -251,6 +251,24 @@ class VariantConfig:
 
 
 @dataclass(frozen=True)
+class SamGovConfig:
+    """SAM.gov API knobs (scaffold for vendor enrichment).
+
+    The key itself is never stored here: it comes from the environment
+    variable named by ``api_key_env_var`` (a free key from a SAM.gov account →
+    Account Details → "Public API Key"). Keys expire every 90 days. Free
+    tiers: 10 requests/day with a basic account, 1,000/day with a SAM entity
+    role. Until a key is set, :class:`SamGovClient` refuses every call rather
+    than burning the budget or failing obscurely.
+    """
+
+    base_url: str = "https://api.sam.gov"
+    api_key_env_var: str = "SAM_API_KEY"
+    timeout_seconds: int = 30
+    max_retries: int = 2
+
+
+@dataclass(frozen=True)
 class Config:
     """Top-level configuration: paths, shared knobs, and per-SIN variants."""
 
@@ -263,6 +281,7 @@ class Config:
     audit: AuditConfig = field(default_factory=AuditConfig)
     report: ReportConfig = field(default_factory=ReportConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    sam: SamGovConfig = field(default_factory=SamGovConfig)
     variants: dict[str, VariantConfig] = field(default_factory=dict)
 
 
