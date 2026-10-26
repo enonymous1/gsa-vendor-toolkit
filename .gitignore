@@ -15,11 +15,13 @@ env/
 .coverage
 htmlcov/
 
-# Pipeline runtime data (generated, not source)
-output/
-ext_res/
-downloads/
-reports/
+# Pipeline runtime data (generated, not source) — root-level only, so that
+# sample-data/ can ship its own ext_res/ and output/ fixtures.
+/output/
+/ext_res/
+/downloads/
+/reports/
+/demo/
 
 # OS / editors
 .DS_Store

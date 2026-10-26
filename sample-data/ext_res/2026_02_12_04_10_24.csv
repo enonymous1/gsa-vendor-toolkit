@@ -1,0 +1,4 @@
+Vendor,Contact #,Price List,Category,State,City,Has_Price_List_Flag
+Acme,101,http://example.com/acme,54151S,VA,Arlington,Yes
+Beta,202,http://example.com/beta,54151S,VA,Richmond,Yes
+Gamma,303,,54151S,DC,Washington,

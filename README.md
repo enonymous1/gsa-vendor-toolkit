@@ -1,7 +1,60 @@
 # gsa-vendor-toolkit
 
+[![CI](https://github.com/enonymous1/gsa-vendor-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/enonymous1/gsa-vendor-toolkit/actions/workflows/ci.yml)
+
+You have a GSA schedule vendor list and hundreds of published price lists.
+This turns them into per-title pricing metrics, interactive dashboards, and
+executive summaries — one command per stage, from a vendor snapshot CSV to a
+report you can open in a browser.
+
+![Interactive pricing dashboard](docs/dashboard-preview.png)
+
 GSA vendor price-list pipeline, refactored from the original `ss-gsaVendors`
 scripts into an installable, maintainable Python package (`vendors_toolkit`).
+
+## Why
+
+The original workflow was 20 organically grown scripts, each duplicating the
+next, with silent disagreements (retries, copy-vs-move, dashboard page
+length) hidden in the copies. This package unifies them into one tested
+pipeline: the same engines for both variants, the drift captured explicitly in
+`config.py`, and differential tests proving the new outputs match the
+originals byte-for-byte where they should — and fixing the places where the
+originals were quietly wrong (see Behavioral notes).
+
+## Non-goals
+
+- **Not a vendor-data fetcher.** The vendor snapshot CSV comes from a manual
+  GSA eLibrary export (see Step 0); eLibrary has no public API, and this tool
+  does not scrape it.
+- **Not a live price monitor.** It analyzes a snapshot, not a feed. Re-run it
+  when you have a new export.
+- **Not a SAM.gov replacement.** The SAM.gov client is an optional enrichment
+  scaffold (entity lookup, exclusion screening); the pipeline works without it.
+- **Not a web service.** No server, no API, no scheduler — a CLI you run when
+  you need a report.
+
+## Try it in 2 minutes
+
+The repo ships a small fictional dataset (`sample-data/`) so you can run the
+whole pipeline without a real GSA export:
+
+```bash
+git clone https://github.com/enonymous1/gsa-vendor-toolkit.git
+cd gsa-vendor-toolkit
+pip install -e .
+cp -r sample-data demo          # sample-data stays pristine; work in demo/
+vendors-toolkit --root demo sanitize
+vendors-toolkit --root demo organize
+vendors-toolkit --root demo merge --states VA
+vendors-toolkit --root demo filter --states VA
+vendors-toolkit --root demo metrics --states VA
+vendors-toolkit --root demo report --states VA
+open demo/output/reports/VA_IT_Pricing_Full_Report.html
+```
+
+(`download` is skipped here because the sample price lists are already in
+place; `national`, `audit`, and `export` are optional stages — see below.)
 
 **Pipeline:** download vendor price lists → organize by State/City → merge Excel
 "Price List" sheets into per-state master CSVs → filter by SIN → compute per-title
@@ -17,7 +70,10 @@ copy-vs-move, dashboard page length, …), the drift is captured explicitly in
 
 ```text
 gsa-vendor-toolkit/
+├── .github/workflows/ci.yml       # pytest + ruff + mypy on Python 3.10–3.12
 ├── pyproject.toml                 # packaging, ruff + mypy-strict, `vendors-toolkit` entry point
+├── sample-data/                   # fictional dataset for the 2-minute quick start
+├── docs/dashboard-preview.png     # screenshot of the generated dashboard
 ├── src/vendors_toolkit/
 │   ├── __init__.py
 │   ├── cli.py                     # `vendors-toolkit` subcommands (one per stage)
@@ -30,7 +86,7 @@ gsa-vendor-toolkit/
 │   └── integrations/              # SAM.gov API client (scaffold; needs SAM_API_KEY)
 ├── tools/export_to_md.py          # standalone .py → Markdown exporter (unchanged)
 ├── original/                      # pristine copies of the 20 original scripts (reference only)
-└── tests/                         # pytest suite (57 tests)
+└── tests/                         # pytest suite (62 tests)
 ```
 
 ## Install
@@ -60,14 +116,49 @@ metrics → audit → export → national → report`. `--variant` accepts `5415
 `541611`, or `all` (default). Logging: `--log-level`, `--log-dir` (rotating DEBUG
 file), or the `VENDORS_LOG_LEVEL` env var.
 
+## Worked example
+
+From the sample data: two Virginia vendors, three job titles. After `merge`,
+`filter`, and `metrics`, `VA_IT_Role_Metrics.csv` holds:
+
+```csv
+Title_Key,Count,Min_Price,Max_Price,Mean_Price,Median_Price,Mode_Price,Merged_Descriptions,Price_Range
+ANALYST,2,100,200,150.0,150.0,100,Does analysis | More analysis,100
+CLERK,1,75,75,75.0,75.0,75,,0
+MANAGER,1,1000,1000,1000.0,1000.0,1000,Manages,0
+```
+
+And `report` turns it into an executive summary:
+
+```markdown
+# IT Pricing Executive Summary: VA
+
+- **Total Unique Roles**: 3
+
+## 🏆 Top 10 Roles by Frequency
+| Job Title | Count | Mean Price |
+| :--- | :---: | :---: |
+| ANALYST | 2 | $150.00 |
+| CLERK | 1 | $75.00 |
+| MANAGER | 1 | $1,000.00 |
+```
+
+plus the full interactive dashboard (searchable, sortable, filterable) shown
+at the top of this README.
+
 ## Pipeline / workflow
 
-```text
-vendor snapshot CSV (you supply)
-  └─► sanitize ─► download ─► organize ─► merge ─► filter ─► metrics
-                                                          ├─► audit / export
-                                                          ├─► national (54151S)
-                                                          └─► report (dashboards)
+```mermaid
+flowchart TD
+    snapshot[Vendor snapshot CSV<br/>manual eLibrary export] --> sanitize
+    sanitize --> download
+    download --> organize
+    organize --> merge
+    merge --> filter
+    filter --> metrics
+    metrics --> report[report: dashboards + summaries]
+    merge --> audit[audit / export]
+    organize --> national[national master, 54151S]
 ```
 
 ### Step 0 — Get the input file (the pipeline does not fetch this itself)
@@ -87,7 +178,8 @@ for 54151S, `2026_03_02_08_18_31.csv` for 541611 (those dated names are just
 the snapshots the config was built with; rename your export to match, or pass
 `--input` to `sanitize` to use another file).
 
-### Stages and their outputs (under `output/`)
+<details>
+<summary>Stages and their outputs (under <code>output/</code>)</summary>
 
 | Stage | Reads | Writes |
 | --- | --- | --- |
@@ -101,6 +193,8 @@ the snapshots the config was built with; rename your export to match, or pass
 | `export` | sanitized CSV | `price_lists/`, `regional/<STATE>/`, `summaries/*.md` |
 | `national` | manifest + sanitized CSV + organized workbooks (54151S) | `merged_national/National_IT_Master_Price_List.csv` |
 | `report` | metrics CSVs | `<reports>/<STATE>_*_Full_Report.html`, `*_Executive_Summary.md` |
+
+</details>
 
 The `download` stage is plain HTTP file fetching (`requests.get` per `Price
 List` URL, with retries) — there is no API behind the price lists. The
