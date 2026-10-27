@@ -31,6 +31,10 @@ originals were quietly wrong (see Behavioral notes).
   when you have a new export.
 - **Not a SAM.gov replacement.** The SAM.gov client is an optional enrichment
   scaffold (entity lookup, exclusion screening); the pipeline works without it.
+- **Not a publisher of SAM.gov export data.** The `integrity` stage analyzes
+  a Responsibility and Integrity Records export you place under
+  `<root>/integrity/`; the real export (thousands of officials' contact
+  details) is never committed. The repo ships only a fictional workbook.
 - **Not a web service.** No server, no API, no scheduler — a CLI you run when
   you need a report.
 
@@ -51,6 +55,8 @@ vendors-toolkit --root demo filter --states VA
 vendors-toolkit --root demo metrics --states VA
 vendors-toolkit --root demo report --states VA
 open demo/output/reports/VA_IT_Pricing_Full_Report.html
+# Offline SAM.gov integrity-records analysis (fictional sample included):
+vendors-toolkit --root demo integrity
 ```
 
 (`download` is skipped here because the sample price lists are already in
@@ -73,6 +79,7 @@ gsa-vendor-toolkit/
 ├── .github/workflows/ci.yml       # pytest + ruff + mypy on Python 3.10–3.12
 ├── pyproject.toml                 # packaging, ruff + mypy-strict, `vendors-toolkit` entry point
 ├── sample-data/                   # fictional dataset for the 2-minute quick start
+│   └── integrity/                 # fictional SAM.gov integrity-records workbook
 ├── docs/dashboard-preview.png     # screenshot of the generated dashboard
 ├── src/vendors_toolkit/
 │   ├── __init__.py
@@ -81,12 +88,13 @@ gsa-vendor-toolkit/
 │   ├── logging_config.py          # idempotent stdlib logging
 │   ├── data/                      # GSA_MAP, sanitize_frame, title/price cleaning helpers
 │   ├── pipeline/                  # sanitize, download, organize, merge, filter, national
-│   ├── analysis/                  # metrics, audit + cardinality, exports, unique titles
+│   ├── analysis/                  # metrics, audit + cardinality, exports, unique titles,
+│   │                            # integrity-records export analysis
 │   ├── reporting/                 # HTML dashboards + executive summaries
 │   └── integrations/              # SAM.gov API client (scaffold; needs SAM_API_KEY)
 ├── tools/export_to_md.py          # standalone .py → Markdown exporter (unchanged)
 ├── original/                      # pristine copies of the 20 original scripts (reference only)
-└── tests/                         # pytest suite (62 tests)
+└── tests/                         # pytest suite (77 tests)
 ```
 
 ## Install
@@ -193,6 +201,7 @@ the snapshots the config was built with; rename your export to match, or pass
 | `export` | sanitized CSV | `price_lists/`, `regional/<STATE>/`, `summaries/*.md` |
 | `national` | manifest + sanitized CSV + organized workbooks (54151S) | `merged_national/National_IT_Master_Price_List.csv` |
 | `report` | metrics CSVs | `<reports>/<STATE>_*_Full_Report.html`, `*_Executive_Summary.md` |
+| `integrity` (standalone) | SAM.gov integrity-records `.xlsx` under `<root>/integrity/` | `output/integrity/` count CSVs + `integrity_summary.md` |
 
 </details>
 
@@ -220,6 +229,34 @@ Free tiers: 10 requests/day with a basic account, 1,000/day with a SAM entity
 role. Keys expire every 90 days. The `sam` command runs once per invocation
 (not per variant) so it never double-spends the daily budget.
 
+### Integrity-records export analysis (offline, folded in from `mp-sam-data-bank`)
+
+`analysis/integrity.py` analyzes the SAM.gov Responsibility and Integrity
+Records export — the FPS workbook with a two-row preamble, a 38-column
+header row, and one row per record — without any API key:
+
+```bash
+# Place your SAM.gov export under <root>/integrity/, or pass it directly:
+vendors-toolkit --root demo integrity
+vendors-toolkit integrity --input /path/to/export.xlsx --output /path/to/reports
+```
+
+It finds the header row by content (no brittle `skiprows=2`), validates the
+required columns, normalizes empty cells (no float-`NaN` leakage), parses
+record dates to days, buckets trends by month, and writes count CSVs
+(record type, agency, state, NAICS, monthly) plus `integrity_summary.md`
+under `output/integrity/`. There is no PDF output: the original's
+single-page ReportLab dump ran off the page, and CSV + Markdown match the
+rest of this toolkit's reporting. The original's hardcoded
+`F:/Code/...` path, undeclared `reportlab` dependency, and per-timestamp
+"trend" counts are all fixed; the loader was verified against the real
+2,838-row export as well as the fictional sample.
+
+**Do not commit a real export.** It contains officials' names, phones, and
+emails. The sample workbook (`sample-data/integrity/sam_integrity_sample.xlsx`,
+24 fictional rows, 555-010 numbers, `@example.com` addresses) is the only
+integrity data that ships.
+
 ## Configuration
 
 `config.py` holds every knob the originals hardcoded: paths, download
@@ -241,7 +278,7 @@ URLs, and the per-variant drift (`VariantConfig`). All dataclasses are frozen.
 ```bash
 ruff check src/ tests/ && ruff format --check src/ tests/
 mypy src/          # strict
-pytest             # 57 tests
+pytest             # 77 tests
 ```
 
 Differential tests proving byte-level behavioral parity with `original/` were run

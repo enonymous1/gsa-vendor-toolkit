@@ -18,6 +18,12 @@ Pipeline stages (see ``vendors_toolkit.cli`` for the command surface):
 - ``national``  -- national IT merge (``merge_national_it``)
 - ``report``    -- HTML dashboards + Markdown executive summaries
                   (``generate_pricing_reports`` + ``generate_541611_reports``)
+
+Standalone (not pipeline stages):
+
+- ``sam``       -- SAM.gov API enrichment (scaffold; needs ``SAM_API_KEY``)
+- ``integrity`` -- offline SAM.gov Responsibility and Integrity Records
+                  export analysis (folded in from ``mp-sam-data-bank``)
 """
 
 __version__ = "0.1.0"

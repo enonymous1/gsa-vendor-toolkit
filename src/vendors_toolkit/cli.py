@@ -1,7 +1,9 @@
 """Command-line interface for the vendors_toolkit pipeline.
 
 One subcommand per pipeline stage, plus the standalone ``sam`` subcommand for
-SAM.gov lookups. Each stage runs the unified engine for the selected variant(s).
+SAM.gov lookups and the standalone ``integrity`` subcommand for offline
+SAM.gov integrity-records exports. Each stage runs the unified engine for the
+selected variant(s).
 Global options select the project root
 (``--root``, else the ``VENDORS_ROOT`` env var, else the working directory),
 the variant (``--variant 54151S`` / ``541611`` / ``all``), and logging.
@@ -17,6 +19,7 @@ from collections.abc import Callable, Sequence
 from vendors_toolkit import __version__
 from vendors_toolkit.analysis.audit import analyze_cardinality, run_audit
 from vendors_toolkit.analysis.exports import extract_unique_titles, generate_exports
+from vendors_toolkit.analysis.integrity import analyze_integrity_export
 from vendors_toolkit.analysis.metrics import compute_title_metrics
 from vendors_toolkit.config import Config, VariantConfig, default_config
 from vendors_toolkit.integrations.samgov import SamGovClient
@@ -62,6 +65,12 @@ STAGES: list[tuple[str, str]] = [
         "SAM.gov vendor enrichment: entity lookup, exclusion screening, "
         "opportunity search. Standalone (not part of the pipeline chain); "
         "requires SAM_API_KEY.",
+    ),
+    (
+        "integrity",
+        "Analyze a SAM.gov Responsibility and Integrity Records export "
+        "(offline workbook) into count CSVs + a Markdown summary. "
+        "Standalone (not part of the pipeline chain).",
     ),
 ]
 
@@ -164,6 +173,18 @@ def _stage_sam(cfg: Config, variant: VariantConfig, args: argparse.Namespace) ->
     print(json.dumps(result, indent=2))
 
 
+def _stage_integrity(cfg: Config, variant: VariantConfig, args: argparse.Namespace) -> None:
+    """Integrity-records analysis. Runs once (see main); variant is unused."""
+    del variant
+    paths = analyze_integrity_export(
+        cfg,
+        input_path=args.input,
+        output_dir=args.output,
+    )
+    for path in paths:
+        print(f"integrity report -> {path}")
+
+
 STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], None]] = {
     "sanitize": _stage_sanitize,
     "download": _stage_download,
@@ -176,6 +197,7 @@ STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], Non
     "national": _stage_national,
     "report": _stage_report,
     "sam": _stage_sam,
+    "integrity": _stage_integrity,
 }
 
 
@@ -242,6 +264,18 @@ def build_parser() -> argparse.ArgumentParser:
     filter_p = stage_parsers["filter"]
     filter_p.add_argument("--sin", default=None, help="SIN to keep (default: the variant's SIN).")
 
+    integrity_p = stage_parsers["integrity"]
+    integrity_p.add_argument(
+        "--input",
+        default=None,
+        help="Integrity-records .xlsx export (default: first .xlsx under <root>/integrity/).",
+    )
+    integrity_p.add_argument(
+        "--output",
+        default=None,
+        help="Report output directory (default: <root>/output/integrity/).",
+    )
+
     sam_p = stage_parsers["sam"]
     sam_p.add_argument(
         "--status",
@@ -277,8 +311,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = default_config(root=args.root)
     run_stage = STAGE_FUNCS[args.stage]
     variants = _selected_variants(cfg, args.variant)
-    if args.stage == "sam":
-        # SAM.gov calls count against a daily budget: run once, not per variant.
+    if args.stage in ("sam", "integrity"):
+        # SAM.gov calls count against a daily budget, and the integrity
+        # export is variant-independent: run once, not per variant.
         variants = variants[:1]
     try:
         for variant in variants:

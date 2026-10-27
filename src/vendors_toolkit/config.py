@@ -251,6 +251,21 @@ class VariantConfig:
 
 
 @dataclass(frozen=True)
+class IntegrityConfig:
+    """SAM.gov Responsibility and Integrity Records export knobs.
+
+    The offline counterpart to the SAM.gov API scaffold: the export is a
+    workbook the user places under ``<root>/integrity/`` (the real export is
+    never committed -- it carries officials' contact details; the repo
+    ships a fictional workbook under ``sample-data/integrity/``).
+    """
+
+    input_dirname: str = "integrity"
+    output_dirname: str = "integrity"
+    header_search_rows: int = 5
+
+
+@dataclass(frozen=True)
 class SamGovConfig:
     """SAM.gov API knobs (scaffold for vendor enrichment).
 
@@ -282,6 +297,7 @@ class Config:
     report: ReportConfig = field(default_factory=ReportConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
     sam: SamGovConfig = field(default_factory=SamGovConfig)
+    integrity: IntegrityConfig = field(default_factory=IntegrityConfig)
     variants: dict[str, VariantConfig] = field(default_factory=dict)
 
 

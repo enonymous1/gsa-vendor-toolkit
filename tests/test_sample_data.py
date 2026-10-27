@@ -18,6 +18,7 @@ def test_sample_data_present() -> None:
     assert (ROOT / "output" / "downloads" / "price_lists" / "Acme_101.xlsx").is_file()
     assert (ROOT / "output" / "downloads" / "price_lists" / "Beta_202.xlsx").is_file()
     assert (ROOT / "output" / "downloads" / "541611_price_lists" / "Delta_404.xlsx").is_file()
+    assert (ROOT / "integrity" / "sam_integrity_sample.xlsx").is_file()
 
 
 def test_sample_data_columns_match_pipeline_contract() -> None:
