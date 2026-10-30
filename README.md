@@ -80,7 +80,8 @@ gsa-vendor-toolkit/
 ├── pyproject.toml                 # packaging, ruff + mypy-strict, `vendors-toolkit` entry point
 ├── sample-data/                   # fictional dataset for the 2-minute quick start
 │   ├── integrity/                 # fictional SAM.gov integrity-records workbook
-│   └── opportunities/             # fictional SAM.gov opportunity-search payload
+│   ├── opportunities/             # fictional SAM.gov opportunity-search payload
+│   └── solicitations/             # fictional GSA legacy schedule solicitations
 ├── docs/dashboard-preview.png     # screenshot of the generated dashboard
 ├── src/vendors_toolkit/
 │   ├── __init__.py
@@ -90,7 +91,8 @@ gsa-vendor-toolkit/
 │   ├── data/                      # GSA_MAP, sanitize_frame, title/price cleaning helpers
 │   ├── pipeline/                  # sanitize, download, organize, merge, filter, national
 │   ├── analysis/                  # metrics, audit + cardinality, exports, unique titles,
-│   │                            # integrity-records export analysis, opportunity parsing
+│   │                            # integrity-records export analysis, opportunity parsing,
+│   │                            # legacy solicitation archive normalization
 │   ├── reporting/                 # HTML dashboards + executive summaries
 │   └── integrations/              # SAM.gov API client (scaffold; needs SAM_API_KEY)
 ├── tools/export_to_md.py          # standalone .py → Markdown exporter (unchanged)
@@ -204,6 +206,7 @@ the snapshots the config was built with; rename your export to match, or pass
 | `report` | metrics CSVs | `<reports>/<STATE>_*_Full_Report.html`, `*_Executive_Summary.md` |
 | `integrity` (standalone) | SAM.gov integrity-records `.xlsx` under `<root>/integrity/` | `output/integrity/` count CSVs + `integrity_summary.md` |
 | `opportunities` (standalone) | SAM.gov API search, or a saved search payload JSON | `output/opportunities/` `opportunities.csv` + `opportunities_summary.md` |
+| `solicitations` (standalone) | Saved GSA legacy schedule solicitation JSON (file or `<root>/solicitations/` directory) | `output/solicitations/` `solicitations.csv` + `solicitation_documents.csv` + `solicitations_summary.md` |
 
 </details>
 
@@ -292,6 +295,51 @@ is visible).
 which mirrors the API's `opportunitiesData` shape, but no live call has
 been made from this box (no key is stored here). The first run with a real
 key is the gate for confirming the live field set.
+
+### Legacy schedule solicitations archive (offline, folded in from `ss-gsa`)
+
+`analysis/solicitations.py` is the current-standard version of `ss-gsa`,
+which scraped GSA's eOffer portal with Scrapy for legacy schedule
+solicitations (reference-only solicitations; no new offers are accepted
+under them). The fold-in keeps only the solicitations job and drops the
+live crawl entirely — this stage parses saved spider output, makes no
+HTTP requests, and adds no Scrapy dependency:
+
+```bash
+# Offline: parse the fictional sample (5 rows: 3 schedules, 1 duplicate, 1 skipped)
+vendors-toolkit solicitations --input sample-data/solicitations/solicitations_sample.json --output /tmp/sol
+
+# Or point it at a directory of saved spider output (index + per-schedule files):
+vendors-toolkit --root demo solicitations   # reads <root>/solicitations/
+```
+
+It fixes the original's bugs: the listing index it reads was two JSON
+arrays concatenated in one file (invalid as a single document), and every
+index row had an empty `documents` list because the feed item was emitted
+before the documents page was parsed — the loader decodes successive
+JSON values and merges rows by schedule, unioning document lists by URL,
+so an index row plus its per-schedule file becomes one complete record.
+Status strings are whitespace-normalized (the original's non-breaking
+spaces become plain spaces), rows with no schedule are skipped instead
+of coerced, documents missing a name or URL are dropped and counted, and
+nothing is deleted on run (the original's spider `__init__` rotated prior
+outputs away, keeping 2 backups instead of the intended 3). Output is
+`solicitations.csv` (one row per schedule, with a document count),
+`solicitation_documents.csv` (one row per document link), and
+`solicitations_summary.md` under `output/solicitations/`.
+
+The original's unfinished Acquisition Gateway forecast spider does not
+ship here: it guessed at API endpoints and never produced a typed item,
+and the `opportunities` stage above already covers that job via SAM.gov's
+official API. The original's 12 MB of tracked output (including 9.2 MB of
+duplicated debug dumps) does not ship either; the only solicitation data
+in the repo is the 5-row fictional sample above.
+
+**Live-run note:** no live eOffer crawl has been run from this box, and
+the saved pages the format was verified against are from February 2025.
+If a live re-crawl is ever wanted, it is a separate decision — with
+robots and rate-limit rules of its own — not an extension of this
+offline archive stage.
 
 ## Configuration
 

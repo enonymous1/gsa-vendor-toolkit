@@ -1,0 +1,66 @@
+[
+  {
+    "documents": [
+      {
+        "name": "01 - Solicitation",
+        "url": "https://sws.gsa.gov/sws-search/viewSolDocument.do?method=view&solNum=EXAMPLE900A&solDoc=EXAMPLE900A01"
+      },
+      {
+        "name": "02 - Price Proposal Template",
+        "url": "https://sws.gsa.gov/sws-search/viewSolDocument.do?method=view&solNum=EXAMPLE900A&solDoc=EXAMPLE900A02"
+      }
+    ],
+    "posted_date": "2024-01-15",
+    "schedule": "900",
+    "status": "EXAMPLE-1-000001-A\u00a0Refresh\u00a0#\u00a01",
+    "title": "Fictional Professional Services",
+    "url": "https://eoffer.gsa.gov/util/publishedsolicitationutil?solicitationNumber=EXAMPLE-1-000001-A&refreshAmendNumber=1&scheduleNumber=900&solicitationType=SCHEDULES&isMas=Y"
+  },
+  {
+    "documents": [],
+    "posted_date": "2024-02-20",
+    "schedule": "901",
+    "status": "EXAMPLE-1-000002-B\u00a0Refresh\u00a0#\u00a02",
+    "title": "Fictional Office Supplies",
+    "url": "https://eoffer.gsa.gov/util/publishedsolicitationutil?solicitationNumber=EXAMPLE-1-000002-B&refreshAmendNumber=2&scheduleNumber=901&solicitationType=SCHEDULES&isMas=Y"
+  },
+  {
+    "documents": [
+      {
+        "name": "02 - Price Proposal Template",
+        "url": "https://sws.gsa.gov/sws-search/viewSolDocument.do?method=view&solNum=EXAMPLE900A&solDoc=EXAMPLE900A02"
+      },
+      {
+        "name": "03 - Past Performance Evaluation",
+        "url": "https://sws.gsa.gov/sws-search/viewSolDocument.do?method=view&solNum=EXAMPLE900A&solDoc=EXAMPLE900A03"
+      }
+    ],
+    "posted_date": "",
+    "schedule": "900",
+    "status": "",
+    "title": "",
+    "url": ""
+  },
+  {
+    "documents": [],
+    "posted_date": "2024-03-01",
+    "title": "Row with no schedule (skipped by the parser)"
+  },
+  {
+    "documents": [
+      {
+        "name": "Document with no URL",
+        "url": ""
+      },
+      {
+        "name": "",
+        "url": "https://sws.gsa.gov/sws-search/viewSolDocument.do?method=view&solNum=EXAMPLE902C&solDoc=EXAMPLE902C01"
+      }
+    ],
+    "posted_date": "2024-03-01",
+    "schedule": "902",
+    "status": "EXAMPLE-1-000003-C\u00a0Refresh\u00a0#\u00a01",
+    "title": "Fictional Travel Services",
+    "url": "https://eoffer.gsa.gov/util/publishedsolicitationutil?solicitationNumber=EXAMPLE-1-000003-C&refreshAmendNumber=1&scheduleNumber=902&solicitationType=SCHEDULES&isMas=Y"
+  }
+]

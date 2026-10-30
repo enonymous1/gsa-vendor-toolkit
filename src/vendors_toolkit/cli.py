@@ -3,7 +3,9 @@
 One subcommand per pipeline stage, plus the standalone ``sam`` subcommand for
 SAM.gov lookups and the standalone ``integrity`` subcommand for offline
 SAM.gov integrity-records exports, plus the standalone ``opportunities``
-subcommand for SAM.gov opportunity search (folded in from mp-sam). Each
+subcommand for SAM.gov opportunity search (folded in from mp-sam), plus
+the standalone ``solicitations`` subcommand for the legacy schedule
+solicitation archive (folded in from ss-gsa). Each
 stage runs the unified engine for the selected variant(s).
 Global options select the project root
 (``--root``, else the ``VENDORS_ROOT`` env var, else the working directory),
@@ -26,6 +28,7 @@ from vendors_toolkit.analysis.opportunities import (
     analyze_opportunities_payload,
     load_opportunities_payload,
 )
+from vendors_toolkit.analysis.solicitations import analyze_solicitations
 from vendors_toolkit.config import Config, VariantConfig, default_config
 from vendors_toolkit.integrations.samgov import SamGovClient
 from vendors_toolkit.logging_config import configure_logging
@@ -83,6 +86,14 @@ STAGES: list[tuple[str, str]] = [
         "saved search payload with --input) into one-row-per-notice CSV "
         "+ a Markdown summary. Standalone (not part of the pipeline "
         "chain); the API path requires SAM_API_KEY.",
+    ),
+    (
+        "solicitations",
+        "Normalize saved GSA legacy schedule solicitation JSON (a file, "
+        "or a directory of index + per-schedule files) into "
+        "solicitations.csv + solicitation_documents.csv + a Markdown "
+        "summary. Standalone (not part of the pipeline chain); offline, "
+        "no crawl, no API call.",
     ),
 ]
 
@@ -224,6 +235,18 @@ def _stage_opportunities(cfg: Config, variant: VariantConfig, args: argparse.Nam
         print(f"opportunities report -> {path}")
 
 
+def _stage_solicitations(cfg: Config, variant: VariantConfig, args: argparse.Namespace) -> None:
+    """Solicitation archive normalization. Runs once (see main)."""
+    del variant
+    paths = analyze_solicitations(
+        cfg,
+        input_path=args.input,
+        output_dir=args.output,
+    )
+    for path in paths:
+        print(f"solicitations report -> {path}")
+
+
 STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], None]] = {
     "sanitize": _stage_sanitize,
     "download": _stage_download,
@@ -238,6 +261,7 @@ STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], Non
     "sam": _stage_sam,
     "integrity": _stage_integrity,
     "opportunities": _stage_opportunities,
+    "solicitations": _stage_solicitations,
 }
 
 
@@ -340,6 +364,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=None, help="Max opportunities (API path; default: 10)."
     )
 
+    solicitations_p = stage_parsers["solicitations"]
+    solicitations_p.add_argument(
+        "--input",
+        default=None,
+        help="Saved solicitation JSON file or directory (default: <root>/solicitations/).",
+    )
+    solicitations_p.add_argument(
+        "--output",
+        default=None,
+        help="Report output directory (default: <root>/output/solicitations/).",
+    )
+
     sam_p = stage_parsers["sam"]
     sam_p.add_argument(
         "--status",
@@ -375,10 +411,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = default_config(root=args.root)
     run_stage = STAGE_FUNCS[args.stage]
     variants = _selected_variants(cfg, args.variant)
-    if args.stage in ("sam", "integrity", "opportunities"):
+    if args.stage in ("sam", "integrity", "opportunities", "solicitations"):
         # SAM.gov calls count against a daily budget, and the integrity
-        # export and opportunity search are variant-independent: run once,
-        # not per variant.
+        # export, opportunity search, and solicitation archive are
+        # variant-independent: run once, not per variant.
         variants = variants[:1]
     try:
         for variant in variants:

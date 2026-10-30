@@ -273,6 +273,21 @@ class OpportunitiesConfig:
 
 
 @dataclass(frozen=True)
+class SolicitationsConfig:
+    """Legacy schedule solicitation archive knobs (folded in from ss-gsa).
+
+    The offline counterpart to a crawl: saved spider output (an index
+    file, per-schedule files, or a directory holding both) is placed
+    under ``<root>/solicitations/``. The real spider output is never
+    committed -- it is megabytes of saved federal pages; the repo ships
+    a fictional sample under ``sample-data/solicitations/``.
+    """
+
+    input_dirname: str = "solicitations"
+    output_dirname: str = "solicitations"
+
+
+@dataclass(frozen=True)
 class SamGovConfig:
     """SAM.gov API knobs (scaffold for vendor enrichment).
 
@@ -306,6 +321,7 @@ class Config:
     sam: SamGovConfig = field(default_factory=SamGovConfig)
     integrity: IntegrityConfig = field(default_factory=IntegrityConfig)
     opportunities: OpportunitiesConfig = field(default_factory=OpportunitiesConfig)
+    solicitations: SolicitationsConfig = field(default_factory=SolicitationsConfig)
     variants: dict[str, VariantConfig] = field(default_factory=dict)
 
 
