@@ -2,8 +2,9 @@
 
 One subcommand per pipeline stage, plus the standalone ``sam`` subcommand for
 SAM.gov lookups and the standalone ``integrity`` subcommand for offline
-SAM.gov integrity-records exports. Each stage runs the unified engine for the
-selected variant(s).
+SAM.gov integrity-records exports, plus the standalone ``opportunities``
+subcommand for SAM.gov opportunity search (folded in from mp-sam). Each
+stage runs the unified engine for the selected variant(s).
 Global options select the project root
 (``--root``, else the ``VENDORS_ROOT`` env var, else the working directory),
 the variant (``--variant 54151S`` / ``541611`` / ``all``), and logging.
@@ -21,6 +22,10 @@ from vendors_toolkit.analysis.audit import analyze_cardinality, run_audit
 from vendors_toolkit.analysis.exports import extract_unique_titles, generate_exports
 from vendors_toolkit.analysis.integrity import analyze_integrity_export
 from vendors_toolkit.analysis.metrics import compute_title_metrics
+from vendors_toolkit.analysis.opportunities import (
+    analyze_opportunities_payload,
+    load_opportunities_payload,
+)
 from vendors_toolkit.config import Config, VariantConfig, default_config
 from vendors_toolkit.integrations.samgov import SamGovClient
 from vendors_toolkit.logging_config import configure_logging
@@ -71,6 +76,13 @@ STAGES: list[tuple[str, str]] = [
         "Analyze a SAM.gov Responsibility and Integrity Records export "
         "(offline workbook) into count CSVs + a Markdown summary. "
         "Standalone (not part of the pipeline chain).",
+    ),
+    (
+        "opportunities",
+        "Search SAM.gov contract opportunities via the API (or parse a "
+        "saved search payload with --input) into one-row-per-notice CSV "
+        "+ a Markdown summary. Standalone (not part of the pipeline "
+        "chain); the API path requires SAM_API_KEY.",
     ),
 ]
 
@@ -185,6 +197,33 @@ def _stage_integrity(cfg: Config, variant: VariantConfig, args: argparse.Namespa
         print(f"integrity report -> {path}")
 
 
+def _stage_opportunities(cfg: Config, variant: VariantConfig, args: argparse.Namespace) -> None:
+    """Opportunity search. Runs once (see main); variant is unused.
+
+    With ``--input``, parses a saved search payload offline (no API key,
+    no API call) -- the path the fictional sample exercises. Otherwise
+    makes exactly one API call via the ``sam`` client, so a run cannot
+    double-spend the free daily budget.
+    """
+    del variant
+    if args.input is not None:
+        payload = load_opportunities_payload(args.input)
+    else:
+        if args.keywords is None and args.naics is None and args.state is None:
+            raise ValueError(
+                "opportunities needs a search filter (--keywords, --naics, "
+                "or --state) or a saved payload (--input)."
+            )
+        client = SamGovClient(cfg.sam)
+        limit = args.limit if args.limit is not None else 10
+        payload = client.search_opportunities(
+            keywords=args.keywords, naics=args.naics, state=args.state, limit=limit
+        )
+    paths = analyze_opportunities_payload(cfg, payload, output_dir=args.output)
+    for path in paths:
+        print(f"opportunities report -> {path}")
+
+
 STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], None]] = {
     "sanitize": _stage_sanitize,
     "download": _stage_download,
@@ -198,6 +237,7 @@ STAGE_FUNCS: dict[str, Callable[[Config, VariantConfig, argparse.Namespace], Non
     "report": _stage_report,
     "sam": _stage_sam,
     "integrity": _stage_integrity,
+    "opportunities": _stage_opportunities,
 }
 
 
@@ -276,6 +316,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report output directory (default: <root>/output/integrity/).",
     )
 
+    opportunities_p = stage_parsers["opportunities"]
+    opportunities_p.add_argument(
+        "--input",
+        default=None,
+        help="Saved SAM.gov search payload JSON (offline path; no API call).",
+    )
+    opportunities_p.add_argument(
+        "--output",
+        default=None,
+        help="Report output directory (default: <root>/output/opportunities/).",
+    )
+    opportunities_p.add_argument(
+        "--keywords", default=None, help="Search opportunities by keyword (API path)."
+    )
+    opportunities_p.add_argument(
+        "--naics", default=None, help="NAICS code filter for opportunity search (API path)."
+    )
+    opportunities_p.add_argument(
+        "--state", default=None, help="State filter for opportunity search (API path)."
+    )
+    opportunities_p.add_argument(
+        "--limit", type=int, default=None, help="Max opportunities (API path; default: 10)."
+    )
+
     sam_p = stage_parsers["sam"]
     sam_p.add_argument(
         "--status",
@@ -311,9 +375,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = default_config(root=args.root)
     run_stage = STAGE_FUNCS[args.stage]
     variants = _selected_variants(cfg, args.variant)
-    if args.stage in ("sam", "integrity"):
+    if args.stage in ("sam", "integrity", "opportunities"):
         # SAM.gov calls count against a daily budget, and the integrity
-        # export is variant-independent: run once, not per variant.
+        # export and opportunity search are variant-independent: run once,
+        # not per variant.
         variants = variants[:1]
     try:
         for variant in variants:

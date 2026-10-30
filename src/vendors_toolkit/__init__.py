@@ -24,6 +24,9 @@ Standalone (not pipeline stages):
 - ``sam``       -- SAM.gov API enrichment (scaffold; needs ``SAM_API_KEY``)
 - ``integrity`` -- offline SAM.gov Responsibility and Integrity Records
                   export analysis (folded in from ``mp-sam-data-bank``)
+- ``opportunities`` -- SAM.gov contract-opportunity search to CSV
+                  (folded in from ``mp-sam``; API path needs ``SAM_API_KEY``,
+                  ``--input`` path works offline)
 """
 
 __version__ = "0.1.0"

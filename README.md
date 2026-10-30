@@ -79,7 +79,8 @@ gsa-vendor-toolkit/
 ├── .github/workflows/ci.yml       # pytest + ruff + mypy on Python 3.10–3.12
 ├── pyproject.toml                 # packaging, ruff + mypy-strict, `vendors-toolkit` entry point
 ├── sample-data/                   # fictional dataset for the 2-minute quick start
-│   └── integrity/                 # fictional SAM.gov integrity-records workbook
+│   ├── integrity/                 # fictional SAM.gov integrity-records workbook
+│   └── opportunities/             # fictional SAM.gov opportunity-search payload
 ├── docs/dashboard-preview.png     # screenshot of the generated dashboard
 ├── src/vendors_toolkit/
 │   ├── __init__.py
@@ -89,12 +90,12 @@ gsa-vendor-toolkit/
 │   ├── data/                      # GSA_MAP, sanitize_frame, title/price cleaning helpers
 │   ├── pipeline/                  # sanitize, download, organize, merge, filter, national
 │   ├── analysis/                  # metrics, audit + cardinality, exports, unique titles,
-│   │                            # integrity-records export analysis
+│   │                            # integrity-records export analysis, opportunity parsing
 │   ├── reporting/                 # HTML dashboards + executive summaries
 │   └── integrations/              # SAM.gov API client (scaffold; needs SAM_API_KEY)
 ├── tools/export_to_md.py          # standalone .py → Markdown exporter (unchanged)
 ├── original/                      # pristine copies of the 20 original scripts (reference only)
-└── tests/                         # pytest suite (77 tests)
+└── tests/                         # pytest suite (see CI run for the current count)
 ```
 
 ## Install
@@ -202,6 +203,7 @@ the snapshots the config was built with; rename your export to match, or pass
 | `national` | manifest + sanitized CSV + organized workbooks (54151S) | `merged_national/National_IT_Master_Price_List.csv` |
 | `report` | metrics CSVs | `<reports>/<STATE>_*_Full_Report.html`, `*_Executive_Summary.md` |
 | `integrity` (standalone) | SAM.gov integrity-records `.xlsx` under `<root>/integrity/` | `output/integrity/` count CSVs + `integrity_summary.md` |
+| `opportunities` (standalone) | SAM.gov API search, or a saved search payload JSON | `output/opportunities/` `opportunities.csv` + `opportunities_summary.md` |
 
 </details>
 
@@ -256,6 +258,40 @@ rest of this toolkit's reporting. The original's hardcoded
 emails. The sample workbook (`sample-data/integrity/sam_integrity_sample.xlsx`,
 24 fictional rows, 555-010 numbers, `@example.com` addresses) is the only
 integrity data that ships.
+
+### Opportunity search (folded in from `mp-sam`)
+
+`analysis/opportunities.py` is the current-standard version of `mp-sam`,
+which scraped the SAM.gov search page with Selenium and absolute XPaths.
+The fold-in keeps the job (search active opportunities, one row per notice
+ID, clean CSV) and replaces the scrape with the official API, so a markup
+change can't break it and no browser session is involved:
+
+```bash
+# Offline, no key needed: parse the fictional sample payload
+vendors-toolkit opportunities --input sample-data/opportunities/sam_opportunities_sample.json --output /tmp/opp
+
+# Live, one API call per invocation (counts against the free daily budget):
+export SAM_API_KEY=<redacted>
+vendors-toolkit opportunities --keywords "IT services" --naics 54151S --output /tmp/opp
+```
+
+It fixes the original's bugs: the model no longer overwrites `title` on
+free-text lines, the CSV has a fixed header with exactly one row per
+notice (the original's notice-ID list had 10,032 rows for 9,416 unique
+IDs, and its extracted CSV mixed several opportunities into one row),
+duplicate IDs are dropped with the count reported, rows with no notice ID
+are skipped instead of coerced, and the output path is a CLI argument
+instead of a hardcoded macOS path. The original's March 2025 bulk snapshot
+of real notices and saved SAM.gov HTML pages do not ship; the only
+opportunity data in the repo is the 5-row fictional payload above
+(including one duplicate and one ID-less row, so the dedupe/skip behavior
+is visible).
+
+**Live-run note:** the parser is tested against that fictional payload,
+which mirrors the API's `opportunitiesData` shape, but no live call has
+been made from this box (no key is stored here). The first run with a real
+key is the gate for confirming the live field set.
 
 ## Configuration
 

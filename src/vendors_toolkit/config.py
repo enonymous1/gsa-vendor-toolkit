@@ -266,6 +266,13 @@ class IntegrityConfig:
 
 
 @dataclass(frozen=True)
+class OpportunitiesConfig:
+    """SAM.gov opportunity-search report knobs (folded in from mp-sam)."""
+
+    output_dirname: str = "opportunities"
+
+
+@dataclass(frozen=True)
 class SamGovConfig:
     """SAM.gov API knobs (scaffold for vendor enrichment).
 
@@ -298,6 +305,7 @@ class Config:
     export: ExportConfig = field(default_factory=ExportConfig)
     sam: SamGovConfig = field(default_factory=SamGovConfig)
     integrity: IntegrityConfig = field(default_factory=IntegrityConfig)
+    opportunities: OpportunitiesConfig = field(default_factory=OpportunitiesConfig)
     variants: dict[str, VariantConfig] = field(default_factory=dict)
 
 
