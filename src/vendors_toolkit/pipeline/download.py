@@ -13,7 +13,9 @@ here, as the working 541611 twin did.
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -53,15 +55,35 @@ def detect_extension(url: str, cfg: DownloadConfig) -> str:
 
 
 def download_filename(vendor: str, contact: str, ext: str, max_length: int | None) -> str:
-    """Build the ``<SafeVendor>_<Contact#><ext>`` filename (shared with organize)."""
+    """Build the ``<SafeVendor>_<Contact#><ext>`` filename (shared with organize).
+
+    Both parts are sanitized to alphanumerics/underscore: a ``Contact #``
+    cell is CSV data, and using it verbatim would let a value like
+    ``../../evil`` escape the download directory.
+    """
     safe = "".join(c if c.isalnum() else "_" for c in vendor.strip())
     if max_length is not None:
         safe = safe[:max_length]
-    return f"{safe}_{contact}{ext}"
+    safe_contact = "".join(c if c.isalnum() else "_" for c in contact.strip())
+    return f"{safe}_{safe_contact}{ext}"
 
 
 def _download_one(row: pd.Series, download_dir: Path, cfg: DownloadConfig) -> DownloadOutcome:
-    """Download one price list with retries; skips files already on disk."""
+    """Download one price list; skips files already on disk.
+
+    Attempts: ``cfg.max_retries`` in total (the field is an attempt count,
+    not a retry count — see the config tests, which assert the values).
+    Only 429 and 5xx responses and transport errors are retried; a 4xx
+    other than 429 fails immediately, because retrying it cannot succeed.
+    No sleep is taken after the final attempt.
+
+    The body is written to a ``.part`` sibling and atomically renamed
+    into place only on completion, so a partial download can never be
+    mistaken for a success on the next run (the old code wrote directly
+    to the final path, and the ``filepath.exists()`` check above then
+    reported truncated files as successful). A leftover ``.part`` file
+    is removed on failure.
+    """
     url = str(row["Price List"])
     vendor = str(row["Vendor"]).strip()
     contact = str(row["Contact #"]).strip()
@@ -74,20 +96,29 @@ def _download_one(row: pd.Series, download_dir: Path, cfg: DownloadConfig) -> Do
     if filepath.exists():
         return DownloadOutcome(contact, "Success", "")
 
+    tmp_path = filepath.with_name(filepath.name + ".part")
     error_msg = ""
-    for _ in range(cfg.max_retries):
+    for attempt in range(cfg.max_retries):
         try:
-            response = requests.get(url, timeout=cfg.timeout_seconds, stream=True)
-            if response.status_code == 200:
-                with open(filepath, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=cfg.chunk_size):
-                        f.write(chunk)
-                return DownloadOutcome(contact, "Success", "")
-            error_msg = f"HTTP {response.status_code}"
+            with requests.get(url, timeout=cfg.timeout_seconds, stream=True) as response:
+                if response.status_code == 200:
+                    with open(tmp_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=cfg.chunk_size):
+                            if chunk:
+                                f.write(chunk)
+                    os.replace(tmp_path, filepath)
+                    return DownloadOutcome(contact, "Success", "")
+                if response.status_code == 429 or response.status_code >= 500:
+                    error_msg = f"HTTP {response.status_code}"
+                else:
+                    return DownloadOutcome(contact, "Failed", f"HTTP {response.status_code}")
         except Exception as exc:
             error_msg = str(exc)
-        time.sleep(cfg.retry_sleep_seconds)
+        if attempt < cfg.max_retries - 1:
+            time.sleep(cfg.retry_sleep_seconds)
 
+    with contextlib.suppress(OSError):
+        tmp_path.unlink(missing_ok=True)
     return DownloadOutcome(contact, "Failed", error_msg)
 
 

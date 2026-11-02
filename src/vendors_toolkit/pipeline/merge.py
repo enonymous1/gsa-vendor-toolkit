@@ -96,21 +96,25 @@ def merge_state_price_lists(
         files_processed = 0
         files_skipped = 0
 
-        for city in os.listdir(state_dir):
+        # Sorted iteration: os.listdir/glob order is filesystem order,
+        # and pd.concat preserves input order, so unsorted iteration made
+        # the master CSV's row order vary run to run.
+        for city in sorted(os.listdir(state_dir)):
             city_path = state_dir / city
             if not city_path.is_dir():
                 continue
-            for file_path in glob.glob(str(city_path / "*.xls*")):
+            for file_path in sorted(glob.glob(str(city_path / "*.xls*"))):
                 filename = os.path.basename(file_path)
                 try:
-                    xl = pd.ExcelFile(file_path)
-                    target = find_price_list_sheet(
-                        xl.sheet_names, cfg.merge.sheet_name, cfg.merge.sheet_match
-                    )
-                    if target is None:
-                        files_skipped += 1
-                        continue
-                    df = pd.read_excel(xl, sheet_name=target)
+                    with pd.ExcelFile(file_path) as xl:
+                        target = find_price_list_sheet(
+                            xl.sheet_names, cfg.merge.sheet_name, cfg.merge.sheet_match
+                        )
+                        if target is None:
+                            logger.warning("  Skipping %s: no price-list sheet found.", filename)
+                            files_skipped += 1
+                            continue
+                        df = pd.read_excel(xl, sheet_name=target)
                     df = _add_metadata(
                         df,
                         state=state,
@@ -124,7 +128,7 @@ def merge_state_price_lists(
                     files_processed += 1
                     logger.debug("  [%d] Added: %s", files_processed, filename)
                 except Exception as exc:
-                    logger.debug("  Skipping %s: %s", filename, exc)
+                    logger.warning("  Skipping %s: %s", filename, exc)
                     files_skipped += 1
 
         logger.info(

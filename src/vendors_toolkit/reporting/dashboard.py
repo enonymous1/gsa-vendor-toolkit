@@ -118,7 +118,7 @@ def _dashboard_html(
     heading: str,
     filter_note: str,
     csv_name: str,
-    xlsx_name: str,
+    xlsx_name: str | None,
     js_filename: str,
     page_length: int,
     jquery_url: str,
@@ -126,14 +126,32 @@ def _dashboard_html(
     datatables_js_url: str,
     font_url: str,
 ) -> str:
-    """Render the thin-shell DataTables dashboard HTML."""
+    """Render the thin-shell DataTables dashboard HTML.
+
+    ``page_title``, ``heading``, and ``filter_note`` are HTML-escaped
+    here (not at the call site): they are built from config templates
+    formatted with the CLI's ``--states`` value, so an unescaped state
+    string would land in the rendered page. Descriptions are escaped
+    separately in :func:`description_html`; the shell strings were not,
+    which is what this fixes. ``xlsx_name`` is None when no workbook
+    exists, in which case the Download Excel link is omitted rather
+    than pointing at a missing file.
+    """
+    escaped_title = html.escape(page_title)
+    escaped_heading = html.escape(heading)
+    escaped_note = html.escape(filter_note)
+    excel_link = (
+        f'<a href="./{xlsx_name}" style="color:white; text-decoration:none; background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-size: 0.85rem;">📁 Download Excel</a>'
+        if xlsx_name is not None
+        else ""
+    )
     return f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{page_title}</title>
+    <title>{escaped_title}</title>
     <link rel="stylesheet" href="{datatables_css_url}">
     <link href="{font_url}" rel="stylesheet">
     <style>
@@ -162,11 +180,11 @@ def _dashboard_html(
 </head>
 <body>
     <div class="header">
-        <h1>{heading}</h1>
-        <p>{filter_note}</p>
+        <h1>{escaped_heading}</h1>
+        <p>{escaped_note}</p>
         <div style="margin-top:1.5rem; display: flex; justify-content: center; gap: 10px;">
             <a href="./{csv_name}" style="color:white; text-decoration:none; background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-size: 0.85rem;">📊 Download CSV</a>
-            <a href="./{xlsx_name}" style="color:white; text-decoration:none; background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-size: 0.85rem;">📁 Download Excel</a>
+            {excel_link}
         </div>
     </div>
     <div class="container">
@@ -265,8 +283,10 @@ def generate_reports(
 
         shutil.copy2(metrics_csv, report_dir / metrics_csv.name)
         metrics_xlsx = metrics_csv.with_suffix(".xlsx")
+        xlsx_name = None
         if metrics_xlsx.exists():
             shutil.copy2(metrics_xlsx, report_dir / metrics_xlsx.name)
+            xlsx_name = metrics_xlsx.name
 
         logger.info("Generating reports for %s...", state)
         df = pd.read_csv(metrics_csv)
@@ -309,7 +329,7 @@ def generate_reports(
                 heading=variant.report_heading_template.format(state=state),
                 filter_note=filter_note,
                 csv_name=metrics_csv.name,
-                xlsx_name=metrics_xlsx.name,
+                xlsx_name=xlsx_name,
                 js_filename=js_name,
                 page_length=variant.report_page_length,
                 jquery_url=cfg.report.jquery_url,

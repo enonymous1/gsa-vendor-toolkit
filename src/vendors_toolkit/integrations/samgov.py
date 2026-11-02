@@ -25,6 +25,19 @@ from vendors_toolkit.config import SamGovConfig
 logger = logging.getLogger(__name__)
 
 
+def _retry_after_seconds(response: Any) -> int:
+    """Seconds to wait after a 429, from ``Retry-After`` if usable.
+
+    Falls back to 1s when the header is absent or unparseable, and caps
+    at 60s so a hostile or mistaken header cannot stall a run for hours.
+    """
+    try:
+        value = int(response.headers.get("Retry-After", ""))
+    except (AttributeError, TypeError, ValueError):
+        return 1
+    return max(0, min(value, 60))
+
+
 class SamGovNotConfiguredError(RuntimeError):
     """Raised when a SAM.gov call is attempted without an API key."""
 
@@ -42,6 +55,18 @@ class SamGovClient:
         return bool(self._api_key)
 
     def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+        """GET one SAM.gov endpoint, with a budget-aware retry policy.
+
+        Auth is the ``api_key`` query parameter. Only 429, 5xx, and
+        connection errors are retried — a 4xx other than 429 fails
+        immediately, because retrying a bad key or a forbidden call
+        would burn the free tier's daily budget for nothing. On 429
+        the ``Retry-After`` header is honored (capped at 60s); other
+        retries sleep a fixed 1s. No sleep is taken after the final
+        attempt. A non-JSON body is wrapped in the same ``RuntimeError``
+        shape as a failed request, instead of leaking a bare
+        ``ValueError`` from ``response.json()``.
+        """
         if not self._api_key:
             raise SamGovNotConfiguredError(
                 "SAM.gov API key not configured. Get a free key from a SAM.gov "
@@ -51,7 +76,8 @@ class SamGovClient:
         url = f"{self._cfg.base_url}{path}"
         query = {**params, "api_key": self._api_key}
         last_error = ""
-        for _ in range(self._cfg.max_retries + 1):
+        attempts = self._cfg.max_retries + 1
+        for attempt in range(attempts):
             try:
                 response = requests.get(url, params=query, timeout=self._cfg.timeout_seconds)
                 response.raise_for_status()
@@ -59,9 +85,19 @@ class SamGovClient:
                 if not isinstance(payload, dict):
                     raise RuntimeError("SAM.gov returned a non-object response.")
                 return payload
+            except requests.HTTPError as exc:
+                last_error = str(exc)
+                status = exc.response.status_code if exc.response is not None else None
+                if status is not None and status != 429 and status < 500:
+                    raise RuntimeError(f"SAM.gov request failed: {last_error}") from exc
+                sleep = _retry_after_seconds(exc.response)
             except requests.RequestException as exc:
                 last_error = str(exc)
-                time.sleep(1)
+                sleep = 1
+            except ValueError as exc:
+                raise RuntimeError(f"SAM.gov returned an invalid JSON response: {exc}") from exc
+            if attempt < attempts - 1:
+                time.sleep(sleep)
         raise RuntimeError(f"SAM.gov request failed after retries: {last_error}")
 
     def get_entity_by_uei(self, uei: str) -> dict[str, Any]:
