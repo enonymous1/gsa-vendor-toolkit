@@ -44,7 +44,6 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import cast
 
 import pandas as pd
 
@@ -157,6 +156,18 @@ def _normalize_naics(value: object) -> str:
     return text
 
 
+def _empty_to_na(value: str) -> object:
+    """Map an empty normalized string to ``pd.NA``, else keep the string.
+
+    Deliberately a ``map`` step, not ``Series.where(cond, pd.NA)``:
+    newer pandas-stubs overloads for ``Series[str].where`` do not accept
+    a ``NAType`` as ``other``, so ``where`` fails mypy there even though
+    it runs fine. ``map`` gives the same runtime result (empty -> <NA>,
+    otherwise the string) under both old and new stubs.
+    """
+    return pd.NA if value == "" else value
+
+
 def _normalize_frame(frame: pd.DataFrame) -> pd.DataFrame:
     """Normalize a headered frame: stripped text, parsed dates, NAICS codes.
 
@@ -170,11 +181,17 @@ def _normalize_frame(frame: pd.DataFrame) -> pd.DataFrame:
             columns[column] = parsed.dt.normalize()
         elif column == "Principal NAICS Code":
             values = frame[column].map(_normalize_naics)
-            columns[column] = values.where(values != "", pd.NA)
+            columns[column] = values.map(_empty_to_na)
         else:
             values = frame[column].map(_normalize_text)
-            columns[column] = values.where(values != "", pd.NA)
-    return cast("pd.DataFrame", pd.DataFrame(columns, index=frame.index))
+            columns[column] = values.map(_empty_to_na)
+    # Annotated local, not a cast: the DataFrame constructor's inferred
+    # return type varies across pandas-stubs versions (DataFrame in some,
+    # Any in others), and a cast would be flagged redundant in the former
+    # and required in the latter. Assigning to a typed local satisfies
+    # both without a cast or an ignore comment.
+    result: pd.DataFrame = pd.DataFrame(columns, index=frame.index)
+    return result
 
 
 def load_integrity_records(path: Path | str, *, search_rows: int = 5) -> pd.DataFrame:
